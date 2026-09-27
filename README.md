@@ -1,17 +1,15 @@
 # SSD – Secure Assignment (Hospital Management System)
 
 ## Group Members
-- [Member 1 Name] – [Index Number]
-- [Member 2 Name] – [Index Number]
-- [Member 3 Name] – [Index Number]
-- [Member 4 Name] – [Index Number]
+- R.M.M.K Rathnayaka – IT23217454
+- K.U.R.C.T Rathnayaka – IT23396418
+- D.K.G.A Thasindu – It23373570
 
 ## Original Project
-- Original Repository: `<link-to-original-repo>`
-- Baseline Reference: Commit `cb653ae0c986ed5230f6ef65257978c14c25dd7b` (Imported from original repository; last commit before semester start used as the pre-fix baseline).
+- Original Repository: `https://github.com/Group12ITP/Medicare.git`
 
 ## Modified Project
-- Assignment Repository: `<link-to-this-new-repo>`
+- Assignment Repository: `https://github.com/Group12ITP/ssd-secure-assignment.git`
 
 ## Assignment Overview
 This project is an enterprise Hospital Management System (HMS) developed with Spring Boot, Thymeleaf, and Spring Security. As part of the SE4030 Secure Software Development module, a comprehensive white-box source code security audit and threat analysis were conducted against the pre-fix baseline. Seventeen distinct security vulnerabilities across the OWASP Top 10 (2021), OWASP API Top 10, and CWE catalogs were cataloged. A series of isolated, targeted remediation branches are executed to fix each vulnerability progressively, followed by the addition of OAuth2 / OpenID Connect single sign-on authentication.
