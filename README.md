@@ -1,17 +1,16 @@
 # SSD – Secure Assignment (Hospital Management System)
 
 ## Group Members
-- [Member 1 Name] – [Index Number]
-- [Member 2 Name] – [Index Number]
-- [Member 3 Name] – [Index Number]
-- [Member 4 Name] – [Index Number]
+- R.M.M.K Rathnayaka – IT23217454
+- K.U.R.C.T Rathnayaka – IT23396418
+- D.K.G.A Thasindu – It23373570
 
 ## Original Project
-- Original Repository: `<link-to-original-repo>`
-- Baseline Reference: Commit `cb653ae0c986ed5230f6ef65257978c14c25dd7b` (Imported from original repository; last commit before semester start used as the pre-fix baseline).
+- Original Repository: `https://github.com/Group12ITP/Medicare.git`
+- Baseline Reference: Commit `94fc54a8847880a3067998e369096925e5ff7d84` (Imported from original Medicare repository commit `cb653ae0c986ed5230f6ef65257978c14c25dd7b`; used as the pre-fix baseline).
 
 ## Modified Project
-- Assignment Repository: `<link-to-this-new-repo>`
+- Assignment Repository: `https://github.com/Group12ITP/ssd-secure-assignment.git`
 
 ## Assignment Overview
 This project is an enterprise Hospital Management System (HMS) developed with Spring Boot, Thymeleaf, and Spring Security. As part of the SE4030 Secure Software Development module, a comprehensive white-box source code security audit and threat analysis were conducted against the pre-fix baseline. Seventeen distinct security vulnerabilities across the OWASP Top 10 (2021), OWASP API Top 10, and CWE catalogs were cataloged. A series of isolated, targeted remediation branches are executed to fix each vulnerability progressively, followed by the addition of OAuth2 / OpenID Connect single sign-on authentication.
@@ -61,7 +60,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   2. Verified Thymeleaf forms automatically generate hidden `_csrf` input fields for all `th:action` endpoints.
   3. Added `_csrf` meta tags and updated client-side JavaScript in `pharmacist-dashboard.html` to pass the `X-XSRF-TOKEN` header on asynchronous POST requests.
 - **Branch:** `fix/V1-csrf-protection`
-- **Commit:** `ffd3054`
+- **Commit:** `93b7635`
 - **Verification:**
   - Built successfully via Maven (`BUILD SUCCESS`).
   - Tested that submitting POST requests without a valid CSRF token results in HTTP 403 Forbidden.
@@ -96,7 +95,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   3. Added an `AuthenticationEntryPoint` and `AccessDeniedHandler` redirecting unauthenticated and unauthorized requests to `/logins` (and `/logins?denied=true`).
   4. Updated login controllers (`DoctorController`, `AuthController`, `PatientController`) to bind the authenticated principal and granted authority to the `SecurityContext` upon successful password verification.
 - **Branch:** `fix/V2-enforce-url-authorization`
-- **Commit:** `5a945fa`
+- **Commit:** `fdefeef`
 - **Verification:**
   - Verified project compilation via Maven with JDK 17 (`BUILD SUCCESS`).
   - Verified that unauthenticated requests to `/doctor/dashboard`, `/pharmacist/dashboard`, and `/patient/dashboard` are intercepted by Spring Security and redirected to `/logins`.
@@ -120,7 +119,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
 - **Fix Applied:**
   Removed all `username` request parameter parsing and parameter-based session population across `showDashboard`, `listAppointments`, `calendar`, and `profile` in `DoctorController.java`. User identity is strictly resolved from the authenticated session context, redirecting unauthenticated requests to `/doctor/login`.
 - **Branch:** `fix/V3-prevent-doctor-auth-bypass`
-- **Commit:** `a1c0398`
+- **Commit:** `50cb49d`
 - **Verification:**
   - Verified compilation with Maven wrapper and JDK 17 (`BUILD SUCCESS`).
   - Verified that requesting `/doctor/dashboard?username=sarah.johnson` without an authenticated session fails to grant access and redirects to `/doctor/login`.
@@ -145,7 +144,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   2. Enforced that the pharmacist username must strictly originate from an active, verified `HttpSession` attribute (`pharmacistUsername`), redirecting unauthenticated requests to `/pharmacist/login`.
   3. Added session validation to `/pharmacist/patients`.
 - **Branch:** `fix/V4-prevent-pharmacist-auth-bypass`
-- **Commit:** `8725b2d`
+- **Commit:** `64cf6d9`
 - **Verification:**
   - Compiled successfully with Maven wrapper (`BUILD SUCCESS`).
   - Tested that navigating to `/pharmacist/dashboard?username=alice` without an active pharmacist session redirects to `/pharmacist/login`.
@@ -168,7 +167,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
 - **Fix Applied:**
   Updated `showPatientProfile` to validate the active session and compare the requested path `{id}` against the logged-in patient's verified `patientId`. Any mismatch results in access denial and a redirect back to `/patient/dashboard`.
 - **Branch:** `fix/V5-prevent-patient-profile-idor`
-- **Commit:** `d2aa3a7`
+- **Commit:** `4c1c86f`
 - **Verification:**
   - Compiled successfully with Maven wrapper (`BUILD SUCCESS`).
   - Verified that accessing `/patient/profile/{id}` of a different patient ID redirects to dashboard with an access denied message.
@@ -194,7 +193,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   3. Added object-level ownership checks on `/prescription/details/{prescriptionId}` ensuring patients only view their own prescriptions and doctors only view prescriptions they authored.
   4. Restricted `/prescription/update-status/{prescriptionId}` and `/pharmacist/orders` exclusively to verified pharmacist sessions.
 - **Branch:** `fix/V6-prevent-prescription-bola-idor`
-- **Commit:** `01bf952`
+- **Commit:** `83dad54`
 - **Verification:**
   - Compiled successfully with Maven wrapper (`BUILD SUCCESS`).
   - Verified that unauthorized access attempts across patient, doctor, and status update endpoints are rejected and redirected appropriately.
@@ -222,7 +221,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   3. Added `@Valid` and `BindingResult` to `saveMedicine` to enforce bean validation before saving, returning form errors if validation fails.
   4. Added `@PositiveOrZero` and `@Min(0)` constraints on `unitPrice` and `stockQuantity` in `Medicine.java`.
 - **Branch:** `fix/V12-restrict-medicine-creation`
-- **Commit:** `e39fded`
+- **Commit:** `26b62af`
 - **Verification:**
   - Verified compilation via Maven wrapper (`BUILD SUCCESS`).
   - Confirmed that non-pharmacist requests to `/medicine/add` are redirected to `/pharmacist/login`.
@@ -250,7 +249,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   3. Changed `spring.jpa.hibernate.ddl-auto` default to `validate` and `spring.jpa.show-sql` to `false` via configurable property placeholders.
   4. Provided `application.properties.example` as a safe configuration template for production deployments.
 - **Branch:** `fix/V9-externalize-credentials-secure-tls`
-- **Commit:** `8b53b67`
+- **Commit:** `19bd02c`
 - **Verification:**
   - Verified compilation via Maven wrapper (`BUILD SUCCESS`).
   - Confirmed application loads credentials securely from environment variables without exposing cleartext credentials in source control.
@@ -275,7 +274,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
 - **Fix Applied:**
   Invoked `request.changeSessionId()` immediately upon successful credential validation across `AuthController.java`, `DoctorController.java`, and `PatientController.java`. This forces the servlet container to issue a brand new `JSESSIONID` cookie and migrate session attributes while invalidating the pre-authentication session identifier.
 - **Branch:** `fix/V10-prevent-session-fixation`
-- **Commit:** `c4ececc`
+- **Commit:** `92e6b18`
 - **Verification:**
   - Verified compilation via Maven wrapper (`BUILD SUCCESS`).
   - Confirmed session ID rotation upon successful credential verification.
@@ -298,7 +297,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
 - **Fix Applied:**
   Eliminated dynamic string interpolation into `slide.innerHTML`. Constructed the DOM skeleton with static markup classes (`.name-holder`, `.dept-holder`, `.quote-holder`, `.avatar-img`) and populated all dynamic user inputs strictly via `textContent` and safely URL-encoded attributes (`encodeURIComponent(name)`).
 - **Branch:** `fix/V7-prevent-dom-xss-testimonials`
-- **Commit:** `79ded36`
+- **Commit:** `46e8c2f`
 - **Verification:**
   - Verified compilation and template integrity via Maven wrapper (`BUILD SUCCESS`).
   - Tested HTML markup strings (e.g. `<img src=x onerror=alert(1)>`) and verified they render safely as literal text without DOM script execution.
@@ -324,7 +323,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   1. Replaced all `.innerHTML` string interpolations across `create-prescription.html`, `pharmacist-dashboard.html`, and `scheduled-orders.html` with explicit DOM element creation (`document.createElement`) and safe text assignment (`textContent`).
   2. Replaced unsafe inline `onclick="..."` string concatenations in `create-prescription.html` with programmatic `addEventListener('click', ...)` closures passing typed parameters.
 - **Branch:** `fix/V8-prevent-medicine-dom-xss`
-- **Commit:** `1e4687f`
+- **Commit:** `c50ea7d`
 - **Verification:**
   - Verified compilation via Maven wrapper (`BUILD SUCCESS`).
   - Confirmed that medicines containing HTML or script tags render as escaped literal strings and do not trigger browser script execution.
@@ -353,7 +352,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   2. Deleted the leftover `/debug` route from `PrescriptionController.java`.
   3. Updated `GlobalExceptionHandler.java` to log full stack traces securely via SLF4J, return a sanitized generic error message to end users, and re-throw `AccessDeniedException` so Spring Security can handle authentication redirects seamlessly.
 - **Branch:** `fix/V11-remove-debug-endpoints-sanitize-errors`
-- **Commit:** `e7617b6`
+- **Commit:** `549fe48`
 - **Verification:**
   - Verified compilation via Maven wrapper (`BUILD SUCCESS`).
   - Confirmed exception messages display sanitized generic text while recording detailed diagnostics to server logs.
@@ -378,7 +377,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   2. Applied RFC 4180 quotation and double-quote escaping for all text fields.
   3. Added session-based authorization checks to ensure only authenticated healthcare staff can download hospital reports.
 - **Branch:** `fix/V13-prevent-csv-injection`
-- **Commit:** `7a61f77`
+- **Commit:** `e8303ef`
 - **Verification:**
   - Verified compilation via Maven wrapper (`BUILD SUCCESS`).
   - Tested CSV generation with formula strings (e.g. `=1+1`, `@SUM`) and confirmed they are safely prefixed with `'` in the generated CSV output.
@@ -403,7 +402,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   1. Implemented input-level rejection in `ContactController.java` discarding any contact requests whose `name`, `email`, or `subject` contain `\r` or `\n`.
   2. Implemented defensive sanitization in `EmailService.java` (`sanitizeHeader`) stripping all CRLF sequences from header fields prior to constructing `SimpleMailMessage`.
 - **Branch:** `fix/V14-prevent-email-crlf-injection`
-- **Commit:** `9d0f280`
+- **Commit:** `055d83c`
 - **Verification:**
   - Verified compilation via Maven wrapper (`BUILD SUCCESS`).
   - Tested contact payloads with embedded `\r\n` characters and verified they are rejected by controller validation and sanitized before email header creation.
@@ -431,7 +430,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   4. `Referrer-Policy: strict-origin-when-cross-origin`.
   5. `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
 - **Branch:** `fix/V15-add-security-headers`
-- **Commit:** `4fd032f`
+- **Commit:** `bed27bd`
 - **Verification:**
   - Verified compilation via Maven wrapper (`BUILD SUCCESS`).
   - Confirmed headers `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Content-Security-Policy` are appended to HTTP responses.
@@ -457,7 +456,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   1. Removed all `System.out.println` and `System.err.println` statements logging sensitive medical data across prescription controllers and services.
   2. Replaced them with structured SLF4J logging at appropriate levels (`logger.info`, `logger.debug`, `logger.error`), recording non-sensitive transaction markers (prescription ID, appointment ID) while omitting clinical notes, symptoms, and diagnoses.
 - **Branch:** `fix/V16-remove-phi-console-logging`
-- **Commit:** `b5dc844`
+- **Commit:** `0f37977`
 - **Verification:**
   - Verified compilation via Maven wrapper (`BUILD SUCCESS`).
   - Confirmed that prescription creation and status updates execute cleanly without logging clinical notes or diagnoses to stdout.
