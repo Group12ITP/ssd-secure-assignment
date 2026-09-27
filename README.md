@@ -504,13 +504,95 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
 ---
 
 ## OAuth2 / OpenID Connect Implementation
-*(To be implemented on branch `feature/oauth-openid` following completion of vulnerability fixes)*
-- **Provider Used:** Google Identity Services (OpenID Connect)
-- **Grant Type:** Authorization Code Grant with PKCE
-- **Files Changed:** TBD
+
+### Overview & Security Rationale
+To modernise patient authentication and enhance access security, an industry-standard **OAuth 2.0 / OpenID Connect (OIDC)** authentication flow was integrated for the Hospital Management System patient portal using **Google Identity Services**.
+
+Delegating identity federation to an external OIDC Identity Provider (IdP) delivers critical security benefits:
+1. **Zero Credential Exposure:** Patient passwords are never transmitted to, processed by, or stored in the HMS database, eliminating the risk of database credential leaks, password reuse vulnerabilities, and offline cracking attacks.
+2. **Multi-Factor Authentication (MFA):** Inherits Google's robust security controls, including automated anomaly detection, passkeys, device prompts, and hardware security key MFA.
+3. **Cryptographic Identity Verification & Claim Validation:** Google's OpenID Connect identity tokens (`id_token`) are digitally signed using RS256/ES256 and verified against Google's public JSON Web Key Sets (JWKS). Furthermore, the handler strictly validates that the `email_verified` claim is `true` before trusting the identity, preventing account hijacking via unverified emails.
+4. **Stable Subject Identifier Mapping (`sub`):** Accounts are linked to Google's persistent `sub` claim rather than relying solely on mutable email addresses, preventing account duplicates and maintaining stable patient identity across email changes.
+5. **Session Fixation Defense:** The custom authentication success handler safely invokes `request.changeSessionId()` (guarded against null sessions) upon receiving a valid OAuth authorization response before granting session attributes.
+6. **Portal Scoping & Least Privilege:** OAuth login is strictly confined to the consumer patient portal. Placeholder social buttons were removed from doctor and pharmacist login pages to prevent clinical staff from inadvertently attempting social authentication.
+
+---
+
+### Technical Specifications
+- **Identity Provider (IdP):** Google Identity Services
+- **Protocol:** OpenID Connect Core 1.0 (built atop OAuth 2.0)
+- **Grant Type:** Authorization Code Grant with Proof Key for Code Exchange (PKCE - RFC 7636)
+- **Scopes Requested:** `openid`, `profile`, `email`
+- **Redirect URI:** `{baseUrl}/login/oauth2/code/google`
 - **Branch:** `feature/oauth-openid`
-- **Integration Summary:** TBD
-- **Testing & Verification:** TBD
+- **Code Commits:** `9398b42` (Initial implementation), `c92ed29` (Hardening & Sub Mapping)
+
+---
+
+### Implementation Details & Files Modified
+
+1. **`pom.xml`**:
+   - Added `spring-boot-starter-oauth2-client` to bring in Spring Security 6 OAuth2 client core, JOSE JWT validation (`nimbus-jose-jwt`), and OpenID Connect protocol handlers.
+
+2. **`src/main/resources/application.properties` & `application.properties.example`**:
+   - Configured Google OAuth2 registration properties:
+     ```properties
+     spring.security.oauth2.client.registration.google.client-id=${GOOGLE_CLIENT_ID:mock-google-client-id}
+     spring.security.oauth2.client.registration.google.client-secret=${GOOGLE_CLIENT_SECRET:mock-google-client-secret}
+     spring.security.oauth2.client.registration.google.scope=openid,profile,email
+     spring.security.oauth2.client.registration.google.redirect-uri={baseUrl}/login/oauth2/code/{registrationId}
+     ```
+   - Client secrets and IDs are strictly externalized via environment variables to avoid hardcoded secrets in source control.
+
+3. **`src/main/java/com/example/test/Model/Patient.java` & `PatientRepository.java`**:
+   - Added `google_sub` column and `findByGoogleSub(String googleSub)` to persist Google's stable OpenID Connect subject identifier.
+
+4. **`src/main/java/com/example/test/Security/OAuth2LoginSuccessHandler.java`**:
+   - Implemented hardened authentication success handler:
+     - **Email Verification Check:** Confirms `email_verified == true` before trusting email identity.
+     - **Duplicate Prevention:** Checks `findByGoogleSub` first; if not found, checks `findByEmail` and links `googleSub` to the existing patient record. If neither exists, JIT provisions a new account with compliant defaults and an unguessable password hash.
+     - **Session Fixation Guard:** Calls `request.changeSessionId()` wrapped in `if (request.getSession(false) != null)` to defend against fixation while avoiding `IllegalStateException` on uninitialized sessions.
+     - **Strict Parameter Isolation:** Assigns hardcoded `ROLE_PATIENT` authority without trusting any user-controlled request parameters (`role`, `username`).
+     - Binds the authenticated patient into the session and redirects to `/patient/dashboard`.
+
+5. **`src/main/java/com/example/test/Security/WebSecurityConfig.java`**:
+   - Permitted public access to authorization endpoints: `/oauth2/**` and `/login/oauth2/**` placed *before* role-restricted `/patient/**` rules.
+   - Wired `.oauth2Login()` into the Spring Security filter chain with custom login page `/patient/login` and delegated success handler to `OAuth2LoginSuccessHandler`.
+
+6. **`src/main/resources/templates/patient/patient-login.html`**:
+   - Updated the Google social login button to link directly to `/oauth2/authorization/google` with accessible styling (`display: inline-flex`, ARIA labels, hover effects).
+   - Removed unused/non-functional placeholder social login markup from `doctor-login.html` and `pharmacist-login.html`.
+
+7. **Session Guarding across Controllers**:
+   - Guarded `request.changeSessionId()` in `PatientController.java`, `DoctorController.java`, and `AuthController.java` with `if (request.getSession(false) != null)` to safely handle requests with or without pre-existing sessions.
+
+---
+
+### Secret Audit in Git History
+A forensic inspection of the repository history was performed:
+```bash
+git log --all --full-history -p -- src/main/resources/application.properties
+```
+- **Findings:** In the initial baseline import commit `cb653ae0c986ed5230f6ef65257978c14c25dd7b`, hardcoded credentials (`spring.datasource.password=123`, `username=app_user`) were present in `application.properties`.
+- **Remediation:** In Fix V9 (`8b53b67`), these credentials were removed and fully externalized via environment variables (`${SPRING_DATASOURCE_PASSWORD:}`), and a sanitized `application.properties.example` template was introduced.
+- **Security Notice:** Because `123` exists in the Git commit history, that credential is treated as compromised and must be rotated on the target SQL Server instance. `application.properties.example` contains zero real secrets.
+
+---
+
+### Verification and Testing Results
+1. **Compilation:** Clean compilation verified on JDK 17:
+   ```powershell
+   $env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
+   .\mvnw.cmd clean compile -DskipTests
+   ```
+2. **Authorization Rule Ordering:** Confirmed `/oauth2/**` and `/login/oauth2/**` appear in the `permitAll()` section before `/patient/**` `hasRole(ROLE_PATIENT)`.
+3. **End-to-End Application Testing:**
+   - **Google Button Flow:** Clicking "Sign in with Google" initiates an authorization redirect to `https://accounts.google.com/o/oauth2/v2/auth` with PKCE challenge, state, and `scope=openid profile email`.
+   - **Duplicate Prevention:** Verified that returning users with matching `sub` or `email` are linked directly to their existing patient entity without creating duplicates.
+   - **RBAC Cross-Portal Boundary:** Verified that a user logged into the patient portal accessing `/doctor/dashboard` is denied access and redirected to `/logins?denied=true` (HTTP 403 / Access Denied enforcement).
+   - **Portal Isolation:** Verified that `patient-login.html` is the only page with an active Google login button.
+
+---
 
 ---
 
