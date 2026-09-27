@@ -1,17 +1,16 @@
 # SSD – Secure Assignment (Hospital Management System)
 
 ## Group Members
-- [Member 1 Name] – [Index Number]
-- [Member 2 Name] – [Index Number]
-- [Member 3 Name] – [Index Number]
-- [Member 4 Name] – [Index Number]
+- R.M.M.K Rathnayaka – IT23217454
+- K.U.R.C.T Rathnayaka – IT23396418
+- D.K.G.A Thasindu – It23373570
 
 ## Original Project
-- Original Repository: `<link-to-original-repo>`
-- Baseline Reference: Commit `cb653ae0c986ed5230f6ef65257978c14c25dd7b` (Imported from original repository; last commit before semester start used as the pre-fix baseline).
+- Original Repository: `https://github.com/Group12ITP/Medicare.git`
+- Baseline Reference: Commit `94fc54a8847880a3067998e369096925e5ff7d84` (Imported from original Medicare repository commit `cb653ae0c986ed5230f6ef65257978c14c25dd7b`; used as the pre-fix baseline).
 
 ## Modified Project
-- Assignment Repository: `<link-to-this-new-repo>`
+- Assignment Repository: `https://github.com/Group12ITP/ssd-secure-assignment.git`
 
 ## Assignment Overview
 This project is an enterprise Hospital Management System (HMS) developed with Spring Boot, Thymeleaf, and Spring Security. As part of the SE4030 Secure Software Development module, a comprehensive white-box source code security audit and threat analysis were conducted against the pre-fix baseline. Seventeen distinct security vulnerabilities across the OWASP Top 10 (2021), OWASP API Top 10, and CWE catalogs were cataloged. A series of isolated, targeted remediation branches are executed to fix each vulnerability progressively, followed by the addition of OAuth2 / OpenID Connect single sign-on authentication.
@@ -61,7 +60,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   2. Verified Thymeleaf forms automatically generate hidden `_csrf` input fields for all `th:action` endpoints.
   3. Added `_csrf` meta tags and updated client-side JavaScript in `pharmacist-dashboard.html` to pass the `X-XSRF-TOKEN` header on asynchronous POST requests.
 - **Branch:** `fix/V1-csrf-protection`
-- **Commit:** `ffd3054`
+- **Commit:** `93b7635`
 - **Verification:**
   - Built successfully via Maven (`BUILD SUCCESS`).
   - Tested that submitting POST requests without a valid CSRF token results in HTTP 403 Forbidden.
@@ -96,7 +95,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
   3. Added an `AuthenticationEntryPoint` and `AccessDeniedHandler` redirecting unauthenticated and unauthorized requests to `/logins` (and `/logins?denied=true`).
   4. Updated login controllers (`DoctorController`, `AuthController`, `PatientController`) to bind the authenticated principal and granted authority to the `SecurityContext` upon successful password verification.
 - **Branch:** `fix/V2-enforce-url-authorization`
-- **Commit:** `5a945fa`
+- **Commit:** `fdefeef`
 - **Verification:**
   - Verified project compilation via Maven with JDK 17 (`BUILD SUCCESS`).
   - Verified that unauthenticated requests to `/doctor/dashboard`, `/pharmacist/dashboard`, and `/patient/dashboard` are intercepted by Spring Security and redirected to `/logins`.
@@ -120,7 +119,7 @@ This project is an enterprise Hospital Management System (HMS) developed with Sp
 - **Fix Applied:**
   Removed all `username` request parameter parsing and parameter-based session population across `showDashboard`, `listAppointments`, `calendar`, and `profile` in `DoctorController.java`. User identity is strictly resolved from the authenticated session context, redirecting unauthenticated requests to `/doctor/login`.
 - **Branch:** `fix/V3-prevent-doctor-auth-bypass`
-- **Commit:** `a1c0398`
+- **Commit:** `50cb49d`
 - **Verification:**
   - Verified compilation with Maven wrapper and JDK 17 (`BUILD SUCCESS`).
   - Verified that requesting `/doctor/dashboard?username=sarah.johnson` without an authenticated session fails to grant access and redirects to `/doctor/login`.
