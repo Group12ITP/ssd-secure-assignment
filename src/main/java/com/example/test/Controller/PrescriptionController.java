@@ -1,0 +1,391 @@
+package com.example.test.Controller;
+
+import com.example.test.Model.Doctor;
+import com.example.test.Model.Medicine;
+import com.example.test.Model.Patient;
+import com.example.test.Model.Prescription;
+import com.example.test.Model.PrescriptionMedicine;
+import com.example.test.Service.MedicineService;
+import com.example.test.Service.PrescriptionService;
+import com.example.test.Service.PrescriptionMedicineService;
+import com.example.test.Service.DoctorAppointmentService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+
+import jakarta.servlet.http.HttpServletRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+@Controller
+@RequestMapping("/prescription")
+public class PrescriptionController {
+
+    private static final Logger logger = LoggerFactory.getLogger(PrescriptionController.class);
+
+    @Autowired
+    private PrescriptionService prescriptionService;
+
+    @Autowired
+    private MedicineService medicineService;
+
+    @Autowired
+    private DoctorAppointmentService appointmentService;
+
+    @Autowired
+    private PrescriptionMedicineService prescriptionMedicineService;
+
+    @GetMapping("/create")
+    public String showCreatePrescriptionForm(Model model) {
+        // Redirect to doctor dashboard if no appointment ID provided
+        model.addAttribute("error", "Please select an appointment to create a prescription");
+        return "redirect:/doctor/dashboard";
+    }
+
+    @GetMapping("/create/{appointmentId}")
+    public String showCreatePrescriptionForm(@PathVariable Long appointmentId, HttpServletRequest request, Model model) {
+        try {
+            // Verify doctor authentication
+            Object doctorObj = request.getSession().getAttribute("doctor");
+            if (!(doctorObj instanceof Doctor)) {
+                model.addAttribute("error", "Please log in as a doctor to create prescriptions.");
+                return "redirect:/doctor/login";
+            }
+            Doctor loggedDoctor = (Doctor) doctorObj;
+
+            // Get appointment details
+            var appointment = appointmentService.getAppointmentById(appointmentId);
+            if (appointment == null) {
+                model.addAttribute("error", "Appointment not found");
+                return "redirect:/doctor/dashboard";
+            }
+
+            // Verify doctor owns this appointment
+            if (!loggedDoctor.getDoctorId().equals(appointment.getDoctorId())) {
+                model.addAttribute("error", "Access denied: You can only create prescriptions for your own appointments.");
+                return "redirect:/doctor/dashboard";
+            }
+
+            // Get medicine categories
+            List<String> categories = medicineService.getAllCategories();
+
+            model.addAttribute("appointment", appointment);
+            model.addAttribute("categories", categories);
+            // Pre-populate prescription with required IDs so hidden fields bind properly
+            Prescription prescription = new Prescription();
+            prescription.setDoctorId(appointment.getDoctorId());
+            prescription.setPatientId(appointment.getPatientId());
+            prescription.setAppointmentId(appointment.getAppointmentId());
+            prescription.setStatus("Active");
+            prescription.setIsUrgent(false);
+            model.addAttribute("prescription", prescription);
+            return "doctor/create-prescription";
+        } catch (Exception e) {
+            System.err.println("Error loading prescription form: " + e.getMessage());
+            e.printStackTrace();
+            model.addAttribute("error", "Error loading prescription form: " + e.getMessage());
+            return "redirect:/doctor/dashboard";
+        }
+    }
+
+    @PostMapping("/create")
+    public String createPrescription(@ModelAttribute Prescription prescription,
+                                     @RequestParam(value = "medicineIds", required = false) Long[] medicineIds,
+                                     @RequestParam(value = "dosages", required = false) String[] dosages,
+                                     @RequestParam(value = "frequencies", required = false) String[] frequencies,
+                                     @RequestParam(value = "durations", required = false) String[] durations,
+                                     @RequestParam(value = "instructions", required = false) String[] instructions,
+                                     Model model,
+                                     HttpServletRequest request) {
+        try {
+            // Verify doctor authentication
+            Object doctorObj = request.getSession().getAttribute("doctor");
+            if (!(doctorObj instanceof Doctor)) {
+                model.addAttribute("error", "Please log in as a doctor to create prescriptions.");
+                return "redirect:/doctor/login";
+            }
+            Doctor loggedDoctor = (Doctor) doctorObj;
+            prescription.setDoctorId(loggedDoctor.getDoctorId());
+            logger.info("Processing prescription creation for appointment ID: {}", prescription.getAppointmentId());
+
+            // Validate required fields
+            if (prescription.getDiagnosis() == null || prescription.getDiagnosis().trim().isEmpty()) {
+                model.addAttribute("error", "Diagnosis is required");
+                // Return to form with current data
+                var appointment = appointmentService.getAppointmentById(prescription.getAppointmentId());
+                List<String> categories = medicineService.getAllCategories();
+                model.addAttribute("appointment", appointment);
+                model.addAttribute("categories", categories);
+                return "doctor/create-prescription";
+            }
+
+            // Set default values if null
+            if (prescription.getStatus() == null) {
+                prescription.setStatus("Active");
+            }
+            if (prescription.getIsUrgent() == null) {
+                prescription.setIsUrgent(false);
+            }
+
+            // Serialize selected medicines to JSON and set medicineDetails before save
+            if (medicineIds != null && medicineIds.length > 0) {
+                try {
+                    List<Map<String, Object>> medicineDetailsList = new ArrayList<>();
+                    for (int i = 0; i < medicineIds.length; i++) {
+                        Map<String, Object> entry = new HashMap<>();
+                        entry.put("medicineId", medicineIds[i]);
+                        entry.put("dosage", (dosages != null && i < dosages.length) ? dosages[i] : "1 tablet");
+                        entry.put("frequency", (frequencies != null && i < frequencies.length) ? frequencies[i] : "twice daily");
+                        entry.put("duration", (durations != null && i < durations.length) ? durations[i] : "7 days");
+                        entry.put("instructions", (instructions != null && i < instructions.length) ? instructions[i] : "");
+                        // Optional enrichment with medicine name/strength
+                        medicineService.getMedicineById(medicineIds[i]).ifPresent(m -> {
+                            entry.put("medicineName", m.getMedicineName());
+                            entry.put("genericName", m.getGenericName());
+                            entry.put("strength", m.getStrength());
+                            entry.put("dosageForm", m.getDosageForm());
+                            entry.put("unitPrice", m.getUnitPrice());
+                        });
+                        medicineDetailsList.add(entry);
+                    }
+                    ObjectMapper mapper = new ObjectMapper();
+                    prescription.setMedicineDetails(mapper.writeValueAsString(medicineDetailsList));
+                } catch (Exception jsonEx) {
+                    System.err.println("Error serializing medicine details: " + jsonEx.getMessage());
+                }
+            }
+
+            // Create the prescription
+            Prescription savedPrescription = prescriptionService.createPrescription(prescription);
+            logger.info("Saved prescription ID: {}", savedPrescription.getPrescriptionId());
+
+            // Save prescription medicines if provided
+            if (medicineIds != null && medicineIds.length > 0) {
+                logger.debug("Processing {} medicines for prescription ID: {}", medicineIds.length, savedPrescription.getPrescriptionId());
+                for (int i = 0; i < medicineIds.length; i++) {
+                    try {
+                        String dosage = (dosages != null && i < dosages.length && dosages[i] != null && !dosages[i].trim().isEmpty())
+                                ? dosages[i] : "1 tablet";
+                        String frequency = (frequencies != null && i < frequencies.length && frequencies[i] != null && !frequencies[i].trim().isEmpty())
+                                ? frequencies[i] : "twice daily";
+                        String duration = (durations != null && i < durations.length && durations[i] != null && !durations[i].trim().isEmpty())
+                                ? durations[i] : "7 days";
+                        String instruction = (instructions != null && i < instructions.length && instructions[i] != null)
+                                ? instructions[i] : "";
+
+                        prescriptionMedicineService.createPrescriptionMedicine(
+                                savedPrescription.getPrescriptionId(),
+                                medicineIds[i],
+                                dosage,
+                                frequency,
+                                duration,
+                                instruction
+                        );
+                    } catch (Exception e) {
+                        logger.error("Error creating prescription medicine item {}: {}", i + 1, e.getMessage());
+                        // Continue with other medicines
+                    }
+                }
+
+                // Calculate and update total amount
+                try {
+                    Double totalAmount = prescriptionMedicineService.getTotalPriceByPrescription(savedPrescription.getPrescriptionId());
+                    if (totalAmount != null) {
+                        savedPrescription.setTotalAmount(totalAmount);
+                        prescriptionService.updatePrescription(savedPrescription);
+                    }
+                } catch (Exception e) {
+                    logger.error("Error calculating total amount for prescription: {}", e.getMessage());
+                }
+            }
+
+            // Update appointment status to completed
+            try {
+                appointmentService.updateAppointmentStatus(prescription.getAppointmentId(), "Completed");
+            } catch (Exception e) {
+                logger.error("Error updating appointment status: {}", e.getMessage());
+            }
+
+            logger.info("Prescription creation completed successfully for appointment ID: {}", prescription.getAppointmentId());
+            return "redirect:/doctor/dashboard?success=Prescription%20created%20successfully";
+
+        } catch (Exception e) {
+            logger.error("Prescription creation error: {}", e.getMessage(), e);
+            model.addAttribute("error", "Failed to create prescription: " + e.getMessage());
+
+            // Return to the form with error message
+            var appointment = appointmentService.getAppointmentById(prescription.getAppointmentId());
+            List<String> categories = medicineService.getAllCategories();
+            model.addAttribute("appointment", appointment);
+            model.addAttribute("categories", categories);
+            return "doctor/create-prescription";
+        }
+    }
+
+    @GetMapping("/medicines/{category}")
+    @ResponseBody
+    public List<Medicine> getMedicinesByCategory(@PathVariable String category) {
+        return medicineService.getPrescriptionMedicinesByCategory(category);
+    }
+
+    @GetMapping("/patient/{patientId}")
+    public String getPatientPrescriptions(@PathVariable Long patientId, HttpServletRequest request, Model model) {
+        Object patientObj = request.getSession().getAttribute("patient");
+        Object doctorObj = request.getSession().getAttribute("doctor");
+        Object pharmacistObj = request.getSession().getAttribute("pharmacistUsername");
+
+        if (patientObj instanceof Patient) {
+            Patient p = (Patient) patientObj;
+            if (!p.getPatientId().equals(patientId)) {
+                model.addAttribute("error", "Access denied: You can only view your own prescriptions.");
+                return "redirect:/patient/dashboard";
+            }
+        } else if (doctorObj == null && pharmacistObj == null) {
+            model.addAttribute("error", "Please log in to view prescriptions.");
+            return "redirect:/logins";
+        }
+
+        List<Prescription> prescriptions = prescriptionService.getPrescriptionsByPatient(patientId);
+        model.addAttribute("prescriptions", prescriptions);
+        model.addAttribute("patientId", patientId);
+        return "patient/prescriptions";
+    }
+
+    @GetMapping("/details/{prescriptionId}")
+    public String getPrescriptionDetails(@PathVariable Long prescriptionId, HttpServletRequest request, Model model) {
+        Prescription prescription = prescriptionService.getPrescriptionById(prescriptionId).orElse(null);
+        if (prescription == null) {
+            model.addAttribute("error", "Prescription not found");
+            return "redirect:/doctor/dashboard";
+        }
+
+        Object patientObj = request.getSession().getAttribute("patient");
+        Object doctorObj = request.getSession().getAttribute("doctor");
+        Object pharmacistObj = request.getSession().getAttribute("pharmacistUsername");
+
+        if (patientObj instanceof Patient) {
+            Patient p = (Patient) patientObj;
+            if (!p.getPatientId().equals(prescription.getPatientId())) {
+                model.addAttribute("error", "Access denied: You cannot view another patient's prescription.");
+                return "redirect:/patient/dashboard";
+            }
+        } else if (doctorObj instanceof Doctor) {
+            Doctor d = (Doctor) doctorObj;
+            if (!d.getDoctorId().equals(prescription.getDoctorId())) {
+                model.addAttribute("error", "Access denied: You cannot view another doctor's prescription.");
+                return "redirect:/doctor/dashboard";
+            }
+        } else if (pharmacistObj == null) {
+            model.addAttribute("error", "Please log in first.");
+            return "redirect:/logins";
+        }
+
+        List<PrescriptionMedicine> medicines = prescriptionMedicineService.getMedicinesByPrescription(prescriptionId);
+        model.addAttribute("prescription", prescription);
+        model.addAttribute("medicines", medicines);
+        return "prescription/details";
+    }
+
+    @GetMapping("/pharmacist/orders")
+    public String getPharmacistOrders(@RequestParam(required = false) String status, HttpServletRequest request, Model model) {
+        Object pharmacistObj = request.getSession().getAttribute("pharmacistUsername");
+        if (!(pharmacistObj instanceof String) || ((String) pharmacistObj).isBlank()) {
+            return "redirect:/pharmacist/login";
+        }
+        List<Prescription> orders;
+        if (status == null || status.trim().isEmpty()) {
+            orders = prescriptionService.getActivePrescriptionsForPharmacist();
+            status = "Active";
+        } else {
+            orders = prescriptionService.getPrescriptionsByStatus(status);
+        }
+        model.addAttribute("orders", orders);
+        model.addAttribute("selectedStatus", status);
+        return "pharmacist/scheduled-orders";
+    }
+
+    // Lightweight API for pharmacist dashboard to fetch medicines as JSON
+    @GetMapping("/api/medicines/{prescriptionId}")
+    @ResponseBody
+    public List<PrescriptionMedicine> getPrescriptionMedicinesJson(@PathVariable Long prescriptionId, HttpServletRequest request) {
+        Object pharmacistObj = request.getSession().getAttribute("pharmacistUsername");
+        Object doctorObj = request.getSession().getAttribute("doctor");
+        if (pharmacistObj == null && doctorObj == null) {
+            return new ArrayList<>();
+        }
+        return prescriptionMedicineService.getMedicinesByPrescription(prescriptionId);
+    }
+
+    @PostMapping("/update-status/{prescriptionId}")
+    public String updatePrescriptionStatus(@PathVariable Long prescriptionId,
+                                           @RequestParam String status,
+                                           HttpServletRequest request,
+                                           Model model) {
+        Object pharmacistObj = request.getSession().getAttribute("pharmacistUsername");
+        if (!(pharmacistObj instanceof String) || ((String) pharmacistObj).isBlank()) {
+            model.addAttribute("error", "Access denied: Only pharmacists can update prescription status.");
+            return "redirect:/pharmacist/login";
+        }
+
+        try {
+            prescriptionService.updatePrescriptionStatus(prescriptionId, status);
+            model.addAttribute("success", "Prescription status updated successfully!");
+        } catch (Exception e) {
+            model.addAttribute("error", "Failed to update prescription status: " + e.getMessage());
+        }
+        return "redirect:/prescription/pharmacist/orders";
+    }
+
+    private String sanitizeCsvField(String value) {
+        if (value == null) {
+            return "";
+        }
+        String sanitized = value;
+        // Mitigate CSV / Formula Injection (CWE-1236)
+        if (sanitized.startsWith("=") || sanitized.startsWith("+") || sanitized.startsWith("-") || sanitized.startsWith("@") || sanitized.startsWith("\t") || sanitized.startsWith("\r")) {
+            sanitized = "'" + sanitized;
+        }
+        return sanitized.replace("\"", "\"\"");
+    }
+
+    // CSV report for today's orders
+    @GetMapping({"/reports/today.csv", "/../reports/today.csv"})
+    public ResponseEntity<String> downloadTodayCsv(HttpServletRequest request) {
+        Object doctor = request.getSession().getAttribute("doctor");
+        Object pharmacist = request.getSession().getAttribute("pharmacistUsername");
+        if (doctor == null && pharmacist == null) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).build();
+        }
+
+        LocalDateTime start = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusDays(1);
+        List<Prescription> todays = prescriptionService.getPrescriptionsByDateRange(start, end);
+        StringBuilder sb = new StringBuilder();
+        sb.append("PrescriptionId,PatientId,DoctorId,Status,Diagnosis,Date\n");
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        for (Prescription p : todays) {
+            sb.append(p.getPrescriptionId()).append(',')
+              .append(p.getPatientId()).append(',')
+              .append(p.getDoctorId()).append(',')
+              .append('"').append(sanitizeCsvField(p.getStatus())).append('"').append(',')
+              .append('"').append(sanitizeCsvField(p.getDiagnosis())).append('"').append(',')
+              .append(p.getPrescriptionDate() != null ? p.getPrescriptionDate().format(fmt) : "").append('\n');
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.TEXT_PLAIN);
+        headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=report-today.csv");
+        return ResponseEntity.ok().headers(headers).body(sb.toString());
+    }
+}
